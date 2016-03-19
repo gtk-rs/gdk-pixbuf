@@ -1,7 +1,0 @@
-cargo:rustc-link-search=native=/nfs/2013/g/gbersac/.brew/Cellar/gdk-pixbuf/2.32.3/lib
-cargo:rustc-link-search=native=/nfs/2013/g/gbersac/.brew/Cellar/glib/2.46.2/lib
-cargo:rustc-link-search=native=/nfs/2013/g/gbersac/.brew/opt/gettext/lib
-cargo:rustc-link-lib=gdk_pixbuf-2.0
-cargo:rustc-link-lib=gobject-2.0
-cargo:rustc-link-lib=glib-2.0
-cargo:rustc-link-lib=intl

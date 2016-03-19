@@ -1,1 +1,0 @@
-{"rustc":7351279579543852085,"target":15578057543590062920,"profile":13023446655302672390,"local":{"variant":"Precalculated","fields":["8924ad29e0c551faa2f8b622c27a9dfed1044b74"]},"features":"None","deps":[["bitflags v0.4.0",14468277312632434455],["glib-sys v0.3.0 (https://github.com/gtk-rs/sys#8924ad29)",15416553256868828260],["libc v0.2.8",16175020547664374845]]}
