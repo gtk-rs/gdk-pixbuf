@@ -25,13 +25,15 @@ glib_wrapper! {
 }
 
 impl Pixbuf {
-    pub unsafe fn new(colorspace: Colorspace, has_alpha: bool, bits_per_sample: i32, width: i32,
+    pub unsafe fn new(has_alpha: bool, bits_per_sample: i32, width: i32,
             height: i32) -> Result<Pixbuf, ()> {
-        Option::from_glib_full(ffi::gdk_pixbuf_new(colorspace, has_alpha.to_glib(),
-                                                   bits_per_sample, width, height)).ok_or(())
+        Option::from_glib_full(ffi::gdk_pixbuf_new(0, /* Only one choice for the GdkColorspace enum */
+                                                   has_alpha.to_glib(),
+                                                   bits_per_sample,
+                                                   width, height)).ok_or(())
     }
 
-    pub fn new_from_vec(mut vec: Vec<u8>, colorspace: Colorspace, has_alpha: bool,
+    pub fn new_from_vec(mut vec: Vec<u8>, has_alpha: bool,
             bits_per_sample: i32, width: i32, height: i32, row_stride: i32) -> Pixbuf {
         unsafe extern "C" fn destroy_vec(_: *mut c_uchar, data: *mut c_void) {
             let _vec: Box<Vec<u8>> = mem::transmute(data); // the vector will be destroyed now
@@ -45,8 +47,14 @@ impl Pixbuf {
         let vec: Box<Vec<u8>> = Box::new(vec);
         unsafe {
             from_glib_full(
-                ffi::gdk_pixbuf_new_from_data(ptr, colorspace, has_alpha.to_glib(), bits_per_sample,
-                    width, height, row_stride, Some(destroy_vec), mem::transmute(vec)))
+                ffi::gdk_pixbuf_new_from_data(ptr,
+                                              0, /* Only one choice for the GdkColorspace enum */
+                                              has_alpha.to_glib(),
+                                              bits_per_sample,
+                                              width, height,
+                                              row_stride,
+                                              Some(destroy_vec),
+                                              mem::transmute(vec)))
         }
     }
 
