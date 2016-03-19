@@ -25,12 +25,32 @@ glib_wrapper! {
 }
 
 impl Pixbuf {
+
+    /// Create a new `Pixbuf`.
+    ///
+    /// `colorspace`: flag for the type of color channel. Only possible value is
+    /// `0` for RGB.
+    ///
+    /// `has_alpha`: true if there is one alpha canal
+    ///
+    /// `bits_per_sample`: must be `8`.
     pub unsafe fn new(colorspace: Colorspace, has_alpha: bool, bits_per_sample: i32, width: i32,
             height: i32) -> Result<Pixbuf, ()> {
         Option::from_glib_full(ffi::gdk_pixbuf_new(colorspace, has_alpha.to_glib(),
                                                    bits_per_sample, width, height)).ok_or(())
     }
 
+    /// Create a new `Pixbuf` initialized with the bits of `vec`
+    ///
+    /// `colorspace`: flag for the type of color channel. Only possible value is
+    /// `0` for RGB.
+    ///
+    /// `has_alpha`: true if there is one alpha canal
+    ///
+    /// `bits_per_sample`: must be `8`.
+    ///
+    /// `row_stride`: distance in bytes between row starts. Usually the number of
+    /// color channels (3 or 4 if `is_alpha` is true) multiply by `width`.
     pub fn new_from_vec(mut vec: Vec<u8>, colorspace: Colorspace, has_alpha: bool,
             bits_per_sample: i32, width: i32, height: i32, row_stride: i32) -> Pixbuf {
         unsafe extern "C" fn destroy_vec(_: *mut c_uchar, data: *mut c_void) {
