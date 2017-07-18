@@ -27,28 +27,47 @@ glib_wrapper! {
 }
 
 impl Pixbuf {
-    pub unsafe fn new(colorspace: Colorspace, has_alpha: bool, bits_per_sample: i32, width: i32,
-            height: i32) -> Result<Pixbuf, ()> {
-        Option::from_glib_full(ffi::gdk_pixbuf_new(colorspace, has_alpha.to_glib(),
-                                                   bits_per_sample, width, height)).ok_or(())
+
+    pub unsafe fn new(has_alpha: bool,
+                      bits_per_sample: i32,
+                      width: usize,
+                      height: usize)
+                      -> Result<Pixbuf, ()> {
+        Option::from_glib_full(ffi::gdk_pixbuf_new(0, /* Only one choice for the GdkColorspace enum */
+                                                   has_alpha.to_glib(),
+                                                   bits_per_sample,
+                                                   width as i32,
+                                                   height as i32)).ok_or(())
     }
 
-    pub fn new_from_vec(mut vec: Vec<u8>, colorspace: Colorspace, has_alpha: bool,
-            bits_per_sample: i32, width: i32, height: i32, row_stride: i32) -> Pixbuf {
+    pub fn new_from_vec(mut vec: Vec<u8>,
+                        has_alpha: bool,
+                        bits_per_sample: i32,
+                        width: usize,
+                        height: usize,
+                        row_stride: usize)
+                        -> Pixbuf {
         unsafe extern "C" fn destroy_vec(_: *mut c_uchar, data: *mut c_void) {
             let _vec: Box<Vec<u8>> = mem::transmute(data); // the vector will be destroyed now
         }
 
         assert!(bits_per_sample == 8);
         let n_channels = if has_alpha { 4 } else { 3 };
-        let last_row_len = width * ((n_channels * bits_per_sample + 7) / 8);
-        assert!(vec.len() == ((height - 1) * row_stride + last_row_len) as usize);
+        let last_row_len = width as i32 * ((n_channels * bits_per_sample + 7) / 8);
+        assert!(vec.len() == ((height as i32 - 1) * row_stride as i32 + last_row_len) as usize);
         let ptr = vec.as_mut_ptr();
         let vec: Box<Vec<u8>> = Box::new(vec);
         unsafe {
             from_glib_full(
-                ffi::gdk_pixbuf_new_from_data(ptr, colorspace, has_alpha.to_glib(), bits_per_sample,
-                    width, height, row_stride, Some(destroy_vec), mem::transmute(vec)))
+                ffi::gdk_pixbuf_new_from_data(ptr,
+                                              0, /* Only one choice for the GdkColorspace enum */
+                                              has_alpha.to_glib(),
+                                              bits_per_sample,
+                                              width as i32,
+                                              height as i32,
+                                              row_stride as i32,
+                                              Some(destroy_vec),
+                                              mem::transmute(vec)))
         }
     }
 
@@ -244,4 +263,18 @@ impl Pixbuf {
             pixels[pos + 3] = alpha;
         }
     }
+}
+
+#[test]
+fn test_new_from_vec() {
+    const NB_CHANNEL: usize = 3;
+    const WIDTH: usize = 5;
+    const HEIGHT: usize = 3;
+    let buff = [0; WIDTH * HEIGHT * NB_CHANNEL];
+    let pixbuf = Pixbuf::new_from_vec(buff.to_vec(),
+                                      false,
+                                      8,
+                                      WIDTH,
+                                      HEIGHT,
+                                      (WIDTH * NB_CHANNEL));
 }
