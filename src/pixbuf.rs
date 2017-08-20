@@ -7,8 +7,12 @@ use std::ptr;
 use std::slice;
 use libc::{c_void, c_uchar};
 use glib::translate::*;
+#[cfg(feature = "v2_36")]
+use glib::BoolError;
 use glib::Error;
 use gdk_pixbuf_ffi as ffi;
+use glib_ffi;
+use gobject_ffi;
 
 use {
     Colorspace,
@@ -102,6 +106,12 @@ impl Pixbuf {
             } else {
                 Err(from_glib_full(error))
             }
+        }
+    }
+
+    pub fn new_from_xpm_data(data: &[&str]) -> Pixbuf {
+        unsafe {
+            from_glib_full(ffi::gdk_pixbuf_new_from_xpm_data(data.to_glib_none().0))
         }
     }
 
@@ -235,5 +245,22 @@ impl Pixbuf {
             pixels[pos + 2] = blue;
             pixels[pos + 3] = alpha;
         }
+    }
+
+    pub fn copy(&self) -> Pixbuf {
+        unsafe {
+            let copy = ffi::gdk_pixbuf_copy(self.to_glib_none().0);
+            FromGlibPtrFull::from_glib_full(copy)
+        }
+    }
+
+    #[cfg(feature = "v2_36")]
+    pub fn copy_options(&self, dest_pixbuf: &mut Pixbuf) -> Result<(), BoolError> {
+        let err: glib_ffi::gboolean =
+            unsafe {
+                ffi::gdk_pixbuf_copy_options(self.to_glib_none().0, dest_pixbuf.to_glib_none().0)
+            };
+
+        BoolError::from_glib(err, "Failed to copy pixbuf options")
     }
 }
