@@ -12,9 +12,11 @@ use glib::translate::*;
 use glib::Error;
 use gio;
 use ffi;
+use gdk_ffi;
 use glib_ffi;
 use gobject_ffi;
 use gio_ffi;
+use gdk::Window;
 
 use {
     Colorspace,
@@ -240,6 +242,13 @@ impl Pixbuf {
             let option_values: Vec<&str> = options.iter().map(|o| o.1).collect();
             let _ = ffi::gdk_pixbuf_savev(self.to_glib_none().0, filename.as_ref().to_glib_none().0, type_.to_glib_none().0, option_keys.to_glib_none().0, option_values.to_glib_none().0, &mut error);
             if error.is_null() { Ok(()) } else { Err(from_glib_full(error)) }
+        }
+    }
+
+    pub fn get_from_window(window: &Window, src_x: i32, src_y: i32, width: i32, height: i32) -> Pixbuf {
+        unsafe {
+            from_glib_full(
+                gdk_ffi::gdk_pixbuf_get_from_window(window.to_glib_none().0, src_x, src_y, width, height))
         }
     }
 }
