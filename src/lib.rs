@@ -3,9 +3,11 @@
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
 extern crate gdk_pixbuf_sys as ffi;
+extern crate gdk_sys as gdk_ffi;
 extern crate glib_sys as glib_ffi;
 extern crate gobject_sys as gobject_ffi;
 extern crate gio_sys as gio_ffi;
+extern crate gdk;
 #[macro_use]
 extern crate glib;
 extern crate gio;
