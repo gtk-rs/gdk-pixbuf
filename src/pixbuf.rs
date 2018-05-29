@@ -194,7 +194,15 @@ impl Pixbuf {
         })
     }
 
-    pub unsafe fn get_pixels(&self) -> &mut [u8] {
+    pub fn get_pixels(&self) -> &[u8] {
+        unsafe {
+            let mut len = 0;
+            let ptr = ffi::gdk_pixbuf_get_pixels_with_length(self.to_glib_none().0, &mut len);
+            slice::from_raw_parts(ptr, len as usize)
+        }
+    }
+
+    pub unsafe fn get_pixels_mut(&self) -> &mut [u8] {
         let mut len = 0;
         let ptr = ffi::gdk_pixbuf_get_pixels_with_length(self.to_glib_none().0, &mut len);
         slice::from_raw_parts_mut(ptr, len as usize)
@@ -205,7 +213,7 @@ impl Pixbuf {
             let n_channels = self.get_n_channels();
             assert!(n_channels == 3 || n_channels == 4);
             let rowstride = self.get_rowstride();
-            let pixels = self.get_pixels();
+            let pixels = self.get_pixels_mut();
             let pos = (y * rowstride + x * n_channels) as usize;
 
             pixels[pos] = red;
