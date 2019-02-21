@@ -8,21 +8,20 @@ use PixbufAnimation;
 use PixbufFormat;
 use ffi;
 use glib;
-use glib::object::Downcast;
+use glib::object::Cast;
 use glib::object::IsA;
 use glib::signal::SignalHandlerId;
-use glib::signal::connect;
+use glib::signal::connect_raw;
 use glib::translate::*;
 use glib_ffi;
-use gobject_ffi;
 use libc;
 use std::boxed::Box as Box_;
-use std::mem;
+use std::fmt;
 use std::mem::transmute;
 use std::ptr;
 
 glib_wrapper! {
-    pub struct PixbufLoader(Object<ffi::GdkPixbufLoader, ffi::GdkPixbufLoaderClass>);
+    pub struct PixbufLoader(Object<ffi::GdkPixbufLoader, ffi::GdkPixbufLoaderClass, PixbufLoaderClass>);
 
     match fn {
         get_type => || ffi::gdk_pixbuf_loader_get_type(),
@@ -59,7 +58,9 @@ impl Default for PixbufLoader {
     }
 }
 
-pub trait PixbufLoaderExt {
+pub const NONE_PIXBUF_LOADER: Option<&PixbufLoader> = None;
+
+pub trait PixbufLoaderExt: 'static {
     fn close(&self) -> Result<(), Error>;
 
     fn get_animation(&self) -> Option<PixbufAnimation>;
@@ -72,7 +73,6 @@ pub trait PixbufLoaderExt {
 
     fn write(&self, buf: &[u8]) -> Result<(), Error>;
 
-    #[cfg(any(feature = "v2_30", feature = "dox"))]
     fn write_bytes(&self, buffer: &glib::Bytes) -> Result<(), Error>;
 
     fn connect_area_prepared<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId;
@@ -84,36 +84,36 @@ pub trait PixbufLoaderExt {
     fn connect_size_prepared<F: Fn(&Self, i32, i32) + 'static>(&self, f: F) -> SignalHandlerId;
 }
 
-impl<O: IsA<PixbufLoader> + IsA<glib::object::Object>> PixbufLoaderExt for O {
+impl<O: IsA<PixbufLoader>> PixbufLoaderExt for O {
     fn close(&self) -> Result<(), Error> {
         unsafe {
             let mut error = ptr::null_mut();
-            let _ = ffi::gdk_pixbuf_loader_close(self.to_glib_none().0, &mut error);
+            let _ = ffi::gdk_pixbuf_loader_close(self.as_ref().to_glib_none().0, &mut error);
             if error.is_null() { Ok(()) } else { Err(from_glib_full(error)) }
         }
     }
 
     fn get_animation(&self) -> Option<PixbufAnimation> {
         unsafe {
-            from_glib_none(ffi::gdk_pixbuf_loader_get_animation(self.to_glib_none().0))
+            from_glib_none(ffi::gdk_pixbuf_loader_get_animation(self.as_ref().to_glib_none().0))
         }
     }
 
     fn get_format(&self) -> Option<PixbufFormat> {
         unsafe {
-            from_glib_none(ffi::gdk_pixbuf_loader_get_format(self.to_glib_none().0))
+            from_glib_none(ffi::gdk_pixbuf_loader_get_format(self.as_ref().to_glib_none().0))
         }
     }
 
     fn get_pixbuf(&self) -> Option<Pixbuf> {
         unsafe {
-            from_glib_none(ffi::gdk_pixbuf_loader_get_pixbuf(self.to_glib_none().0))
+            from_glib_none(ffi::gdk_pixbuf_loader_get_pixbuf(self.as_ref().to_glib_none().0))
         }
     }
 
     fn set_size(&self, width: i32, height: i32) {
         unsafe {
-            ffi::gdk_pixbuf_loader_set_size(self.to_glib_none().0, width, height);
+            ffi::gdk_pixbuf_loader_set_size(self.as_ref().to_glib_none().0, width, height);
         }
     }
 
@@ -121,73 +121,78 @@ impl<O: IsA<PixbufLoader> + IsA<glib::object::Object>> PixbufLoaderExt for O {
         let count = buf.len() as usize;
         unsafe {
             let mut error = ptr::null_mut();
-            let _ = ffi::gdk_pixbuf_loader_write(self.to_glib_none().0, buf.to_glib_none().0, count, &mut error);
+            let _ = ffi::gdk_pixbuf_loader_write(self.as_ref().to_glib_none().0, buf.to_glib_none().0, count, &mut error);
             if error.is_null() { Ok(()) } else { Err(from_glib_full(error)) }
         }
     }
 
-    #[cfg(any(feature = "v2_30", feature = "dox"))]
     fn write_bytes(&self, buffer: &glib::Bytes) -> Result<(), Error> {
         unsafe {
             let mut error = ptr::null_mut();
-            let _ = ffi::gdk_pixbuf_loader_write_bytes(self.to_glib_none().0, buffer.to_glib_none().0, &mut error);
+            let _ = ffi::gdk_pixbuf_loader_write_bytes(self.as_ref().to_glib_none().0, buffer.to_glib_none().0, &mut error);
             if error.is_null() { Ok(()) } else { Err(from_glib_full(error)) }
         }
     }
 
     fn connect_area_prepared<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe {
-            let f: Box_<Box_<Fn(&Self) + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "area-prepared",
-                transmute(area_prepared_trampoline::<Self> as usize), Box_::into_raw(f) as *mut _)
+            let f: Box_<F> = Box_::new(f);
+            connect_raw(self.as_ptr() as *mut _, b"area-prepared\0".as_ptr() as *const _,
+                Some(transmute(area_prepared_trampoline::<Self, F> as usize)), Box_::into_raw(f))
         }
     }
 
     fn connect_area_updated<F: Fn(&Self, i32, i32, i32, i32) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe {
-            let f: Box_<Box_<Fn(&Self, i32, i32, i32, i32) + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "area-updated",
-                transmute(area_updated_trampoline::<Self> as usize), Box_::into_raw(f) as *mut _)
+            let f: Box_<F> = Box_::new(f);
+            connect_raw(self.as_ptr() as *mut _, b"area-updated\0".as_ptr() as *const _,
+                Some(transmute(area_updated_trampoline::<Self, F> as usize)), Box_::into_raw(f))
         }
     }
 
     fn connect_closed<F: Fn(&Self) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe {
-            let f: Box_<Box_<Fn(&Self) + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "closed",
-                transmute(closed_trampoline::<Self> as usize), Box_::into_raw(f) as *mut _)
+            let f: Box_<F> = Box_::new(f);
+            connect_raw(self.as_ptr() as *mut _, b"closed\0".as_ptr() as *const _,
+                Some(transmute(closed_trampoline::<Self, F> as usize)), Box_::into_raw(f))
         }
     }
 
     fn connect_size_prepared<F: Fn(&Self, i32, i32) + 'static>(&self, f: F) -> SignalHandlerId {
         unsafe {
-            let f: Box_<Box_<Fn(&Self, i32, i32) + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "size-prepared",
-                transmute(size_prepared_trampoline::<Self> as usize), Box_::into_raw(f) as *mut _)
+            let f: Box_<F> = Box_::new(f);
+            connect_raw(self.as_ptr() as *mut _, b"size-prepared\0".as_ptr() as *const _,
+                Some(transmute(size_prepared_trampoline::<Self, F> as usize)), Box_::into_raw(f))
         }
     }
 }
 
-unsafe extern "C" fn area_prepared_trampoline<P>(this: *mut ffi::GdkPixbufLoader, f: glib_ffi::gpointer)
+unsafe extern "C" fn area_prepared_trampoline<P, F: Fn(&P) + 'static>(this: *mut ffi::GdkPixbufLoader, f: glib_ffi::gpointer)
 where P: IsA<PixbufLoader> {
-    let f: &&(Fn(&P) + 'static) = transmute(f);
-    f(&PixbufLoader::from_glib_borrow(this).downcast_unchecked())
+    let f: &F = transmute(f);
+    f(&PixbufLoader::from_glib_borrow(this).unsafe_cast())
 }
 
-unsafe extern "C" fn area_updated_trampoline<P>(this: *mut ffi::GdkPixbufLoader, x: libc::c_int, y: libc::c_int, width: libc::c_int, height: libc::c_int, f: glib_ffi::gpointer)
+unsafe extern "C" fn area_updated_trampoline<P, F: Fn(&P, i32, i32, i32, i32) + 'static>(this: *mut ffi::GdkPixbufLoader, x: libc::c_int, y: libc::c_int, width: libc::c_int, height: libc::c_int, f: glib_ffi::gpointer)
 where P: IsA<PixbufLoader> {
-    let f: &&(Fn(&P, i32, i32, i32, i32) + 'static) = transmute(f);
-    f(&PixbufLoader::from_glib_borrow(this).downcast_unchecked(), x, y, width, height)
+    let f: &F = transmute(f);
+    f(&PixbufLoader::from_glib_borrow(this).unsafe_cast(), x, y, width, height)
 }
 
-unsafe extern "C" fn closed_trampoline<P>(this: *mut ffi::GdkPixbufLoader, f: glib_ffi::gpointer)
+unsafe extern "C" fn closed_trampoline<P, F: Fn(&P) + 'static>(this: *mut ffi::GdkPixbufLoader, f: glib_ffi::gpointer)
 where P: IsA<PixbufLoader> {
-    let f: &&(Fn(&P) + 'static) = transmute(f);
-    f(&PixbufLoader::from_glib_borrow(this).downcast_unchecked())
+    let f: &F = transmute(f);
+    f(&PixbufLoader::from_glib_borrow(this).unsafe_cast())
 }
 
-unsafe extern "C" fn size_prepared_trampoline<P>(this: *mut ffi::GdkPixbufLoader, width: libc::c_int, height: libc::c_int, f: glib_ffi::gpointer)
+unsafe extern "C" fn size_prepared_trampoline<P, F: Fn(&P, i32, i32) + 'static>(this: *mut ffi::GdkPixbufLoader, width: libc::c_int, height: libc::c_int, f: glib_ffi::gpointer)
 where P: IsA<PixbufLoader> {
-    let f: &&(Fn(&P, i32, i32) + 'static) = transmute(f);
-    f(&PixbufLoader::from_glib_borrow(this).downcast_unchecked(), width, height)
+    let f: &F = transmute(f);
+    f(&PixbufLoader::from_glib_borrow(this).unsafe_cast(), width, height)
+}
+
+impl fmt::Display for PixbufLoader {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PixbufLoader")
+    }
 }

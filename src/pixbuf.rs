@@ -22,27 +22,32 @@ use futures_core::Future;
 use {
     Colorspace,
     Pixbuf,
-    PixbufExt,
     PixbufFormat,
 };
 
 impl Pixbuf {
-    pub fn new_from_vec(mut vec: Vec<u8>, colorspace: Colorspace, has_alpha: bool,
+    pub fn new_from_mut_slice<T: AsMut<[u8]>>(data: T, colorspace: Colorspace, has_alpha: bool,
             bits_per_sample: i32, width: i32, height: i32, row_stride: i32) -> Pixbuf {
-        unsafe extern "C" fn destroy_vec(_: *mut c_uchar, data: *mut c_void) {
-            let _vec: Box<Vec<u8>> = mem::transmute(data); // the vector will be destroyed now
+        unsafe extern "C" fn destroy<T: AsMut<[u8]>>(_: *mut c_uchar, data: *mut c_void) {
+            let _data: Box<T> = Box::from_raw(data as *mut T); // the data will be destroyed now
         }
 
         assert!(bits_per_sample == 8);
         let n_channels = if has_alpha { 4 } else { 3 };
         let last_row_len = width * ((n_channels * bits_per_sample + 7) / 8);
-        assert!(vec.len() == ((height - 1) * row_stride + last_row_len) as usize);
-        let ptr = vec.as_mut_ptr();
-        let vec: Box<Vec<u8>> = Box::new(vec);
+
+        let mut data: Box<T> = Box::new(data);
+
+        let ptr = {
+            let data: &mut [u8] = (*data).as_mut();
+            assert!(data.len() == ((height - 1) * row_stride + last_row_len) as usize);
+            data.as_mut_ptr()
+        };
+
         unsafe {
             from_glib_full(
                 ffi::gdk_pixbuf_new_from_data(ptr, colorspace.to_glib(), has_alpha.to_glib(), bits_per_sample,
-                    width, height, row_stride, Some(destroy_vec), mem::transmute(vec)))
+                    width, height, row_stride, Some(destroy::<T>), Box::into_raw(data) as *mut _))
         }
     }
 
@@ -104,7 +109,7 @@ impl Pixbuf {
     pub fn new_from_stream_async<'a, P: IsA<gio::InputStream>, Q: Into<Option<&'a gio::Cancellable>>, R: FnOnce(Result<Pixbuf, Error>) + Send + 'static>(stream: &P, cancellable: Q, callback: R) {
         let cancellable = cancellable.into();
         let cancellable = cancellable.to_glib_none();
-        let user_data: Box<Box<R>> = Box::new(Box::new(callback));
+        let user_data: Box<R> = Box::new(callback);
         unsafe extern "C" fn new_from_stream_async_trampoline<R: FnOnce(Result<Pixbuf, Error>) + Send + 'static>(_source_object: *mut gobject_ffi::GObject, res: *mut gio_ffi::GAsyncResult, user_data: glib_ffi::gpointer)
         {
             let mut error = ptr::null_mut();
@@ -114,12 +119,12 @@ impl Pixbuf {
             } else {
                 Err(from_glib_full(error))
             };
-            let callback: Box<Box<R>> = Box::from_raw(user_data as *mut _);
+            let callback: Box<R> = Box::from_raw(user_data as *mut _);
             callback(result);
         }
         let callback = new_from_stream_async_trampoline::<R>;
         unsafe {
-            ffi::gdk_pixbuf_new_from_stream_async(stream.to_glib_none().0, cancellable.0, Some(callback), Box::into_raw(user_data) as *mut _);
+            ffi::gdk_pixbuf_new_from_stream_async(stream.as_ref().to_glib_none().0, cancellable.0, Some(callback), Box::into_raw(user_data) as *mut _);
         }
     }
 
@@ -148,7 +153,7 @@ impl Pixbuf {
     pub fn new_from_stream_at_scale_async<'a, P: IsA<gio::InputStream>, Q: Into<Option<&'a gio::Cancellable>>, R: FnOnce(Result<Pixbuf, Error>) + Send + 'static>(stream: &P, width: i32, height: i32, preserve_aspect_ratio: bool, cancellable: Q, callback: R) {
         let cancellable = cancellable.into();
         let cancellable = cancellable.to_glib_none();
-        let user_data: Box<Box<R>> = Box::new(Box::new(callback));
+        let user_data: Box<R> = Box::new(callback);
         unsafe extern "C" fn new_from_stream_at_scale_async_trampoline<R: FnOnce(Result<Pixbuf, Error>) + Send + 'static>(_source_object: *mut gobject_ffi::GObject, res: *mut gio_ffi::GAsyncResult, user_data: glib_ffi::gpointer)
         {
             let mut error = ptr::null_mut();
@@ -158,12 +163,12 @@ impl Pixbuf {
             } else {
                 Err(from_glib_full(error))
             };
-            let callback: Box<Box<R>> = Box::from_raw(user_data as *mut _);
+            let callback: Box<R> = Box::from_raw(user_data as *mut _);
             callback(result);
         }
         let callback = new_from_stream_at_scale_async_trampoline::<R>;
         unsafe {
-            ffi::gdk_pixbuf_new_from_stream_at_scale_async(stream.to_glib_none().0, width, height, preserve_aspect_ratio.to_glib(), cancellable.0, Some(callback), Box::into_raw(user_data) as *mut _);
+            ffi::gdk_pixbuf_new_from_stream_at_scale_async(stream.as_ref().to_glib_none().0, width, height, preserve_aspect_ratio.to_glib(), cancellable.0, Some(callback), Box::into_raw(user_data) as *mut _);
         }
     }
 
@@ -233,7 +238,7 @@ impl Pixbuf {
     pub fn get_file_info_async<'a, P: Into<Option<&'a gio::Cancellable>>, Q: FnOnce(Result<Option<(PixbufFormat, i32, i32)>, Error>) + Send + 'static, T: AsRef<Path>>(filename: T, cancellable: P, callback: Q) {
         let cancellable = cancellable.into();
         let cancellable = cancellable.to_glib_none();
-        let user_data: Box<Box<Q>> = Box::new(Box::new(callback));
+        let user_data: Box<Q> = Box::new(callback);
         unsafe extern "C" fn get_file_info_async_trampoline<Q: FnOnce(Result<Option<(PixbufFormat, i32, i32)>, Error>) + Send + 'static>(_source_object: *mut gobject_ffi::GObject, res: *mut gio_ffi::GAsyncResult, user_data: glib_ffi::gpointer)
         {
             let mut error = ptr::null_mut();
@@ -247,7 +252,7 @@ impl Pixbuf {
             } else {
                 Ok(Some((from_glib_none(ret), width, height)))
             };
-            let callback: Box<Box<Q>> = Box::from_raw(user_data as *mut _);
+            let callback: Box<Q> = Box::from_raw(user_data as *mut _);
             callback(result);
         }
         let callback = get_file_info_async_trampoline::<Q>;
@@ -298,7 +303,7 @@ impl Pixbuf {
             let mut error = ptr::null_mut();
             let option_keys: Vec<&str> = options.iter().map(|o| o.0).collect();
             let option_values: Vec<&str> = options.iter().map(|o| o.1).collect();
-            let _ = ffi::gdk_pixbuf_save_to_streamv(self.to_glib_none().0, stream.to_glib_none().0, type_.to_glib_none().0, option_keys.to_glib_none().0, option_values.to_glib_none().0, cancellable.0, &mut error);
+            let _ = ffi::gdk_pixbuf_save_to_streamv(self.to_glib_none().0, stream.as_ref().to_glib_none().0, type_.to_glib_none().0, option_keys.to_glib_none().0, option_values.to_glib_none().0, cancellable.0, &mut error);
             if error.is_null() { Ok(()) } else { Err(from_glib_full(error)) }
         }
     }
@@ -307,7 +312,7 @@ impl Pixbuf {
     pub fn save_to_streamv_async<'a, P: IsA<gio::OutputStream>, Q: Into<Option<&'a gio::Cancellable>>, R: FnOnce(Result<(), Error>) + Send + 'static>(&self, stream: &P, type_: &str, options: &[(&str, &str)], cancellable: Q, callback: R) {
         let cancellable = cancellable.into();
         let cancellable = cancellable.to_glib_none();
-        let user_data: Box<Box<R>> = Box::new(Box::new(callback));
+        let user_data: Box<R> = Box::new(callback);
         unsafe extern "C" fn save_to_streamv_async_trampoline<R: FnOnce(Result<(), Error>) + Send + 'static>(_source_object: *mut gobject_ffi::GObject, res: *mut gio_ffi::GAsyncResult, user_data: glib_ffi::gpointer)
         {
             let mut error = ptr::null_mut();
@@ -317,14 +322,14 @@ impl Pixbuf {
             } else {
                 Err(from_glib_full(error))
             };
-            let callback: Box<Box<R>> = Box::from_raw(user_data as *mut _);
+            let callback: Box<R> = Box::from_raw(user_data as *mut _);
             callback(result);
         }
         let callback = save_to_streamv_async_trampoline::<R>;
         unsafe {
             let option_keys: Vec<&str> = options.iter().map(|o| o.0).collect();
             let option_values: Vec<&str> = options.iter().map(|o| o.1).collect();
-            ffi::gdk_pixbuf_save_to_streamv_async(self.to_glib_none().0, stream.to_glib_none().0, type_.to_glib_none().0, option_keys.to_glib_none().0, option_values.to_glib_none().0, cancellable.0, Some(callback), Box::into_raw(user_data) as *mut _);
+            ffi::gdk_pixbuf_save_to_streamv_async(self.to_glib_none().0, stream.as_ref().to_glib_none().0, type_.to_glib_none().0, option_keys.to_glib_none().0, option_values.to_glib_none().0, cancellable.0, Some(callback), Box::into_raw(user_data) as *mut _);
         }
 
     }

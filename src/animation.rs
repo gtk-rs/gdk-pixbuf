@@ -2,19 +2,16 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
-use std::mem;
 use std::path::Path;
 use std::ptr;
 use glib::{Error, TimeVal};
 use glib::object::IsA;
 use glib::translate::*;
 use ffi;
-use glib_ffi;
-use gobject_ffi;
 use super::Pixbuf;
 
 glib_wrapper! {
-    pub struct PixbufAnimationIter(Object<ffi::GdkPixbufAnimationIter>);
+    pub struct PixbufAnimationIter(Object<ffi::GdkPixbufAnimationIter, PixbufAnimationIterClass>);
 
     match fn {
         get_type => || ffi::gdk_pixbuf_animation_iter_get_type(),
@@ -46,7 +43,7 @@ impl PixbufAnimationIter {
 }
 
 glib_wrapper! {
-    pub struct PixbufAnimation(Object<ffi::GdkPixbufAnimation>);
+    pub struct PixbufAnimation(Object<ffi::GdkPixbufAnimation, PixbufAnimationClass>);
 
     match fn {
         get_type => || ffi::gdk_pixbuf_animation_get_type(),
@@ -72,7 +69,6 @@ impl PixbufAnimation {
         }
     }
 
-    #[cfg(any(feature = "v2_28", feature = "dox"))]
     pub fn new_from_resource(resource_path: &str) -> Result<PixbufAnimation, Error> {
         unsafe {
             let mut error = ptr::null_mut();
@@ -97,31 +93,31 @@ pub trait PixbufAnimationExt {
 
 impl<T: IsA<PixbufAnimation>> PixbufAnimationExt for T {
     fn get_width(&self) -> i32 {
-        unsafe { ffi::gdk_pixbuf_animation_get_width(self.to_glib_none().0) }
+        unsafe { ffi::gdk_pixbuf_animation_get_width(self.as_ref().to_glib_none().0) }
     }
 
     fn get_height(&self) -> i32 {
-        unsafe { ffi::gdk_pixbuf_animation_get_height(self.to_glib_none().0) }
+        unsafe { ffi::gdk_pixbuf_animation_get_height(self.as_ref().to_glib_none().0) }
     }
 
     fn get_iter(&self, start_time: TimeVal) -> PixbufAnimationIter {
         unsafe {
             from_glib_full(
-                ffi::gdk_pixbuf_animation_get_iter(self.to_glib_none().0,
+                ffi::gdk_pixbuf_animation_get_iter(self.as_ref().to_glib_none().0,
                                                    &start_time as *const _))
         }
     }
 
     fn is_static_image(&self) -> bool {
         unsafe {
-            from_glib(ffi::gdk_pixbuf_animation_is_static_image(self.to_glib_none().0))
+            from_glib(ffi::gdk_pixbuf_animation_is_static_image(self.as_ref().to_glib_none().0))
         }
     }
 
     fn get_static_image(&self) -> Option<Pixbuf> {
         unsafe {
             from_glib_none(ffi::gdk_pixbuf_animation_get_static_image(
-                self.to_glib_none().0))
+                self.as_ref().to_glib_none().0))
         }
     }
 }
