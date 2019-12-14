@@ -15,13 +15,6 @@ extern crate glib;
 extern crate gio;
 extern crate libc;
 
-#[cfg(feature = "futures")]
-extern crate fragile;
-#[cfg(feature = "futures")]
-extern crate futures;
-
-pub use glib::{Cast, Continue, Error, IsA, Object, StaticType, ToValue, Type, TypedValue, Value};
-
 mod auto;
 
 mod animation;
