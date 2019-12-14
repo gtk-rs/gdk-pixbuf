@@ -13,11 +13,11 @@ use gobject_sys;
 use libc::{c_uchar, c_void};
 use std::mem;
 use std::path::Path;
+use std::pin::Pin;
 use std::ptr;
 use std::slice;
 
-#[cfg(feature = "futures")]
-use futures::future::Future;
+use std::future::Future;
 
 use {Colorspace, Pixbuf, PixbufFormat};
 
@@ -173,24 +173,18 @@ impl Pixbuf {
         }
     }
 
-    #[cfg(feature = "futures")]
     pub fn new_from_stream_async_future<P: IsA<gio::InputStream> + Clone + 'static>(
         stream: &P,
-    ) -> Box<dyn Future<Output = Result<Pixbuf, Error>> + std::marker::Unpin> {
-        use gio::GioFuture;
-
+    ) -> Pin<Box<dyn Future<Output = Result<Pixbuf, Error>> + 'static>> {
         let stream = stream.clone();
-        GioFuture::new(&(), move |_obj, send| {
-            use fragile::Fragile;
-
+        Box::pin(gio::GioFuture::new(&(), move |_obj, send| {
             let cancellable = gio::Cancellable::new();
-            let send = Fragile::new(send);
             Self::new_from_stream_async(&stream, Some(&cancellable), move |res| {
-                let _ = send.into_inner().send(res);
+                send.resolve(res);
             });
 
             cancellable
-        })
+        }))
     }
 
     pub fn new_from_stream_at_scale_async<
@@ -239,21 +233,15 @@ impl Pixbuf {
         }
     }
 
-    #[cfg(feature = "futures")]
     pub fn new_from_stream_at_scale_async_future<P: IsA<gio::InputStream> + Clone + 'static>(
         stream: &P,
         width: i32,
         height: i32,
         preserve_aspect_ratio: bool,
-    ) -> Box<dyn Future<Output = Result<Pixbuf, Error>> + std::marker::Unpin> {
-        use gio::GioFuture;
-
+    ) -> Pin<Box<dyn Future<Output = Result<Pixbuf, Error>> + 'static>> {
         let stream = stream.clone();
-        GioFuture::new(&(), move |_obj, send| {
-            use fragile::Fragile;
-
+        Box::pin(gio::GioFuture::new(&(), move |_obj, send| {
             let cancellable = gio::Cancellable::new();
-            let send = Fragile::new(send);
             Self::new_from_stream_at_scale_async(
                 &stream,
                 width,
@@ -261,12 +249,12 @@ impl Pixbuf {
                 preserve_aspect_ratio,
                 Some(&cancellable),
                 move |res| {
-                    let _ = send.into_inner().send(res);
+                    send.resolve(res);
                 },
             );
 
             cancellable
-        })
+        }))
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(mut_from_ref))]
@@ -296,15 +284,19 @@ impl Pixbuf {
 
     pub fn get_file_info<T: AsRef<Path>>(filename: T) -> Option<(PixbufFormat, i32, i32)> {
         unsafe {
-            let mut width = mem::uninitialized();
-            let mut height = mem::uninitialized();
+            let mut width = mem::MaybeUninit::uninit();
+            let mut height = mem::MaybeUninit::uninit();
             let ret = gdk_pixbuf_sys::gdk_pixbuf_get_file_info(
                 filename.as_ref().to_glib_none().0,
-                &mut width,
-                &mut height,
+                width.as_mut_ptr(),
+                height.as_mut_ptr(),
             );
             if !ret.is_null() {
-                Some((from_glib_none(ret), width, height))
+                Some((
+                    from_glib_none(ret),
+                    width.assume_init(),
+                    height.assume_init(),
+                ))
             } else {
                 None
             }
@@ -331,12 +323,12 @@ impl Pixbuf {
             user_data: glib_sys::gpointer,
         ) {
             let mut error = ptr::null_mut();
-            let mut width = mem::uninitialized();
-            let mut height = mem::uninitialized();
+            let mut width = mem::MaybeUninit::uninit();
+            let mut height = mem::MaybeUninit::uninit();
             let ret = gdk_pixbuf_sys::gdk_pixbuf_get_file_info_finish(
                 res,
-                &mut width,
-                &mut height,
+                width.as_mut_ptr(),
+                height.as_mut_ptr(),
                 &mut error,
             );
             let result = if !error.is_null() {
@@ -344,7 +336,11 @@ impl Pixbuf {
             } else if ret.is_null() {
                 Ok(None)
             } else {
-                Ok(Some((from_glib_none(ret), width, height)))
+                Ok(Some((
+                    from_glib_none(ret),
+                    width.assume_init(),
+                    height.assume_init(),
+                )))
             };
             let callback: Box<Q> = Box::from_raw(user_data as *mut _);
             callback(result);
@@ -360,39 +356,32 @@ impl Pixbuf {
         }
     }
 
-    #[cfg(feature = "futures")]
     #[cfg(any(feature = "v2_32", feature = "dox"))]
     pub fn get_file_info_async_future<T: AsRef<Path> + Clone + 'static>(
         filename: T,
-    ) -> Box<
-        dyn Future<Output = Result<Option<(PixbufFormat, i32, i32)>, Error>> + std::marker::Unpin,
-    > {
-        use gio::GioFuture;
-
-        GioFuture::new(&(), move |_obj, send| {
-            use fragile::Fragile;
-
+    ) -> Pin<Box<dyn Future<Output = Result<Option<(PixbufFormat, i32, i32)>, Error>> + 'static>>
+    {
+        Box::pin(gio::GioFuture::new(&(), move |_obj, send| {
             let cancellable = gio::Cancellable::new();
-            let send = Fragile::new(send);
             Self::get_file_info_async(filename, Some(&cancellable), move |res| {
-                let _ = send.into_inner().send(res);
+                send.resolve(res);
             });
 
             cancellable
-        })
+        }))
     }
 
     pub fn save_to_bufferv(&self, type_: &str, options: &[(&str, &str)]) -> Result<Vec<u8>, Error> {
         unsafe {
             let mut buffer = ptr::null_mut();
-            let mut buffer_size = mem::uninitialized();
+            let mut buffer_size = mem::MaybeUninit::uninit();
             let mut error = ptr::null_mut();
             let option_keys: Vec<&str> = options.iter().map(|o| o.0).collect();
             let option_values: Vec<&str> = options.iter().map(|o| o.1).collect();
             let _ = gdk_pixbuf_sys::gdk_pixbuf_save_to_bufferv(
                 self.to_glib_none().0,
                 &mut buffer,
-                &mut buffer_size,
+                buffer_size.as_mut_ptr(),
                 type_.to_glib_none().0,
                 option_keys.to_glib_none().0,
                 option_values.to_glib_none().0,
@@ -401,7 +390,7 @@ impl Pixbuf {
             if error.is_null() {
                 Ok(FromGlibContainer::from_glib_full_num(
                     buffer,
-                    buffer_size as usize,
+                    buffer_size.assume_init() as usize,
                 ))
             } else {
                 Err(from_glib_full(error))
@@ -489,26 +478,21 @@ impl Pixbuf {
         }
     }
 
-    #[cfg(feature = "futures")]
     #[cfg(any(feature = "v2_36", feature = "dox"))]
     pub fn save_to_streamv_async_future<P: IsA<gio::OutputStream> + Clone + 'static>(
         &self,
         stream: &P,
         type_: &str,
         options: &[(&str, &str)],
-    ) -> Box<dyn Future<Output = Result<(), Error>> + std::marker::Unpin> {
-        use fragile::Fragile;
-        use gio::GioFuture;
-
+    ) -> Pin<Box<dyn Future<Output = Result<(), Error>> + 'static>> {
         let stream = stream.clone();
         let type_ = String::from(type_);
         let options = options
             .iter()
             .map(|&(k, v)| (String::from(k), String::from(v)))
             .collect::<Vec<(String, String)>>();
-        GioFuture::new(self, move |obj, send| {
+        Box::pin(gio::GioFuture::new(self, move |obj, send| {
             let cancellable = gio::Cancellable::new();
-            let send = Fragile::new(send);
             let options = options
                 .iter()
                 .map(|&(ref k, ref v)| (k.as_str(), v.as_str()))
@@ -520,12 +504,12 @@ impl Pixbuf {
                 options.as_slice(),
                 Some(&cancellable),
                 move |res| {
-                    let _ = send.into_inner().send(res);
+                    send.resolve(res);
                 },
             );
 
             cancellable
-        })
+        }))
     }
 
     pub fn savev<T: AsRef<Path>>(
